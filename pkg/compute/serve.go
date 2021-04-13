@@ -1,24 +1,35 @@
 package compute
 
 import (
+	"bufio"
+	"bytes"
+	"context"
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 
+	"github.com/blang/semver"
 	"github.com/fastly/cli/pkg/common"
 	"github.com/fastly/cli/pkg/compute/manifest"
 	"github.com/fastly/cli/pkg/config"
+	"github.com/fastly/cli/pkg/errors"
+	"github.com/fastly/cli/pkg/filesystem"
 	"github.com/fastly/cli/pkg/text"
+	"github.com/fastly/cli/pkg/update"
 )
 
 // ServeCommand produces and runs an artifact from files on the local disk.
 type ServeCommand struct {
 	common.Base
-	manifest manifest.Data
-	build    *BuildCommand
+	manifest         manifest.Data
+	build            *BuildCommand
+	viceroyVersioner update.Versioner
 
 	// Build fields
 	name       common.OptionalString
@@ -28,10 +39,12 @@ type ServeCommand struct {
 }
 
 // NewServeCommand returns a usable command registered under the parent.
-func NewServeCommand(parent common.Registerer, globals *config.Data, build *BuildCommand) *ServeCommand {
+func NewServeCommand(parent common.Registerer, globals *config.Data, build *BuildCommand, viceroyVersioner update.Versioner) *ServeCommand {
 	var c ServeCommand
 
 	c.build = build
+	c.viceroyVersioner = viceroyVersioner
+
 	c.Globals = globals
 	c.CmdClause = parent.Command("serve", "Build and run a Compute@Edge package locally")
 
@@ -70,6 +83,125 @@ func (c *ServeCommand) Exec(in io.Reader, out io.Writer) (err error) {
 
 	text.Break(out)
 
+	progress := text.NewQuietProgress(out)
+
+	progress.Step("Checking latest viceroy version...")
+
+	latest, err := c.viceroyVersioner.LatestVersion(context.Background())
+	if err != nil {
+		progress.Fail()
+
+		return errors.RemediationError{
+			Inner:       fmt.Errorf("error fetching latest version: %w", err),
+			Remediation: errors.NetworkRemediation,
+		}
+	}
+
+	cliPath, err := os.Executable()
+	if err != nil {
+		progress.Fail()
+		return fmt.Errorf("error determining cli executable path: %w", err)
+	}
+
+	// We want to install Viceroy in the same location as the CLI.
+	installDir := filepath.Dir(cliPath)
+
+	cmd := exec.Command("viceroy", "--version")
+
+	stdoutStderr, err := cmd.CombinedOutput()
+	if err != nil {
+		progress.Step("Fetching latest viceroy release...")
+
+		tempPath, err := c.viceroyVersioner.Download(context.Background(), latest)
+		if err != nil {
+			progress.Fail()
+			return fmt.Errorf("error downloading latest viceroy release: %w", err)
+		}
+
+		installPath := installDir + string(os.PathSeparator) + filepath.Base(tempPath)
+
+		if err := os.Rename(tempPath, installPath); err != nil {
+			if err := filesystem.CopyFile(tempPath, installPath); err != nil {
+				progress.Fail()
+				return fmt.Errorf("error moving latest viceroy binary in place: %w", err)
+			}
+		}
+	} else {
+		progress.Step("Checking installed viceroy version...")
+
+		var installedViceroyVersion string
+
+		viceroyError := errors.RemediationError{
+			Inner:       fmt.Errorf("viceroy version not found"),
+			Remediation: errors.BugRemediation,
+		}
+
+		scanner := bufio.NewScanner(bytes.NewReader(stdoutStderr))
+		scanner.Split(bufio.ScanLines)
+
+		for scanner.Scan() {
+			// version output has the expected format: `viceroy 0.1.0`
+			segs := strings.Split(scanner.Text(), " ")
+
+			if len(segs) < 2 {
+				return viceroyError
+			}
+
+			installedViceroyVersion = segs[1]
+			break
+		}
+
+		if installedViceroyVersion == "" {
+			return viceroyError
+		}
+
+		current, err := semver.Parse(installedViceroyVersion)
+		if err != nil {
+			progress.Fail()
+
+			return errors.RemediationError{
+				Inner:       fmt.Errorf("error reading current version: %w", err),
+				Remediation: errors.BugRemediation,
+			}
+		}
+
+		if latest.GT(current) {
+			text.Output(out, "Current viceroy version: %s", current)
+			text.Output(out, "Latest viceroy version: %s", latest)
+
+			progress.Step("Fetching latest viceroy release...")
+			tempPath, err := c.viceroyVersioner.Download(context.Background(), latest)
+			if err != nil {
+				progress.Fail()
+				return fmt.Errorf("error downloading latest viceroy release: %w", err)
+			}
+			defer os.RemoveAll(tempPath)
+
+			progress.Step("Replacing viceroy binary...")
+
+			currentPath, err := exec.LookPath("viceroy")
+			if err != nil {
+				progress.Fail()
+				return fmt.Errorf("error determining executable path: %w", err)
+			}
+
+			currentPath, err = filepath.Abs(currentPath)
+			if err != nil {
+				progress.Fail()
+				return fmt.Errorf("error determining absolute target path: %w", err)
+			}
+
+			if err := os.Rename(tempPath, currentPath); err != nil {
+				if err := filesystem.CopyFile(tempPath, currentPath); err != nil {
+					progress.Fail()
+					return fmt.Errorf("error moving latest viceroy binary in place: %w", err)
+				}
+			}
+		}
+	}
+
+	progress.Done()
+
 	err = c.Local(out)
 	if err != nil {
 		return err
@@ -78,6 +210,7 @@ func (c *ServeCommand) Exec(in io.Reader, out io.Writer) (err error) {
 	return nil
 }
 
+// Local spawns a subprocess that runs the compiled binary.
 func (c *ServeCommand) Local(out io.Writer) error {
 	sig := make(chan os.Signal, 1)
 

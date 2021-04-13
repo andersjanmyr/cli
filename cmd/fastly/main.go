@@ -30,13 +30,14 @@ func main() {
 	// the "real" versions that pull e.g. actual commandline arguments, the
 	// user's real environment, etc.
 	var (
-		args                     = os.Args[1:]
-		configFilePath           = config.FilePath // write-only for `fastly configure`
-		clientFactory            = app.FastlyAPIClient
-		httpClient               = http.DefaultClient
-		cliVersioner             = update.NewGitHub(context.Background(), "fastly", "cli", "fastly")
-		in             io.Reader = os.Stdin
-		out            io.Writer = common.NewSyncWriter(os.Stdout)
+		args                       = os.Args[1:]
+		configFilePath             = config.FilePath // write-only for `fastly configure`
+		clientFactory              = app.FastlyAPIClient
+		httpClient                 = http.DefaultClient
+		cliVersioner               = update.NewGitHub(context.Background(), "fastly", "cli", "fastly")
+		viceroyVersioner           = update.NewGitHub(context.Background(), "fastly", "viceroy", "viceroy")
+		in               io.Reader = os.Stdin
+		out              io.Writer = common.NewSyncWriter(os.Stdout)
 	)
 
 	// We have to manually handle the inclusion of the verbose flag here because
@@ -146,7 +147,7 @@ Compatibility and versioning information for the Fastly CLI is being updated in 
 	}
 
 	// Main is basically just a shim to call Run, so we do that here.
-	if err := app.Run(args, env, file, configFilePath, clientFactory, httpClient, cliVersioner, in, out); err != nil {
+	if err := app.Run(args, env, file, configFilePath, clientFactory, httpClient, cliVersioner, viceroyVersioner, in, out); err != nil {
 		errors.Deduce(err).Print(os.Stderr)
 
 		// NOTE: if we have an error processing the command, then we should be sure

@@ -73,7 +73,7 @@ var (
 // The Run helper should NOT output any error-related information to the out
 // io.Writer. All error-related information should be encoded into an error type
 // and returned to the caller. This includes usage text.
-func Run(args []string, env config.Environment, file config.File, configFilePath string, cf APIClientFactory, httpClient api.HTTPClient, cliVersioner update.Versioner, in io.Reader, out io.Writer) error {
+func Run(args []string, env config.Environment, file config.File, configFilePath string, cf APIClientFactory, httpClient api.HTTPClient, cliVersioner update.Versioner, viceroyVersioner update.Versioner, in io.Reader, out io.Writer) error {
 	// The globals will hold generally-applicable configuration parameters
 	// from a variety of sources, and is provided to each concrete command.
 	globals := config.Data{
@@ -138,7 +138,7 @@ func Run(args []string, env config.Environment, file config.File, configFilePath
 	computeBuild := compute.NewBuildCommand(computeRoot.CmdClause, httpClient, &globals)
 	computeDeploy := compute.NewDeployCommand(computeRoot.CmdClause, httpClient, &globals)
 	computePublish := compute.NewPublishCommand(computeRoot.CmdClause, &globals, computeBuild, computeDeploy)
-	computeServe := compute.NewServeCommand(computeRoot.CmdClause, &globals, computeBuild)
+	computeServe := compute.NewServeCommand(computeRoot.CmdClause, &globals, computeBuild, viceroyVersioner)
 	computeUpdate := compute.NewUpdateCommand(computeRoot.CmdClause, httpClient, &globals)
 	computeValidate := compute.NewValidateCommand(computeRoot.CmdClause, &globals)
 
