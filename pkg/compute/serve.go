@@ -85,7 +85,7 @@ func (c *ServeCommand) Exec(in io.Reader, out io.Writer) (err error) {
 
 	progress := text.NewQuietProgress(out)
 
-	progress.Step("Checking latest viceroy version...")
+	progress.Step("Checking latest viceroy release...")
 
 	latest, err := c.viceroyVersioner.LatestVersion(context.Background())
 	if err != nil {
@@ -97,31 +97,29 @@ func (c *ServeCommand) Exec(in io.Reader, out io.Writer) (err error) {
 		}
 	}
 
-	cliPath, err := os.Executable()
+	dir, err := installDir()
 	if err != nil {
-		progress.Fail()
-		return fmt.Errorf("error determining cli executable path: %w", err)
+		return errors.RemediationError{
+			Inner:       err,
+			Remediation: errors.BugRemediation,
+		}
 	}
 
-	// We want to install Viceroy in the same location as the CLI.
-	installDir := filepath.Dir(cliPath)
-
-	cmd := exec.Command("viceroy", "--version")
+	bin := filepath.Join(dir, c.viceroyVersioner.Name())
+	cmd := exec.Command(bin, "--version")
 
 	stdoutStderr, err := cmd.CombinedOutput()
 	if err != nil {
 		progress.Step("Fetching latest viceroy release...")
 
-		tempPath, err := c.viceroyVersioner.Download(context.Background(), latest)
+		tmp, err := c.viceroyVersioner.Download(context.Background(), latest)
 		if err != nil {
 			progress.Fail()
 			return fmt.Errorf("error downloading latest viceroy release: %w", err)
 		}
 
-		installPath := installDir + string(os.PathSeparator) + filepath.Base(tempPath)
-
-		if err := os.Rename(tempPath, installPath); err != nil {
-			if err := filesystem.CopyFile(tempPath, installPath); err != nil {
+		if err := os.Rename(tmp, bin); err != nil {
+			if err := filesystem.CopyFile(tmp, bin); err != nil {
 				progress.Fail()
 				return fmt.Errorf("error moving latest viceroy binary in place: %w", err)
 			}
@@ -170,29 +168,17 @@ func (c *ServeCommand) Exec(in io.Reader, out io.Writer) (err error) {
 			text.Output(out, "Latest viceroy version: %s", latest)
 
 			progress.Step("Fetching latest viceroy release...")
-			tempPath, err := c.viceroyVersioner.Download(context.Background(), latest)
+			tmp, err := c.viceroyVersioner.Download(context.Background(), latest)
 			if err != nil {
 				progress.Fail()
 				return fmt.Errorf("error downloading latest viceroy release: %w", err)
 			}
-			defer os.RemoveAll(tempPath)
+			defer os.RemoveAll(tmp)
 
 			progress.Step("Replacing viceroy binary...")
 
-			currentPath, err := exec.LookPath("viceroy")
-			if err != nil {
-				progress.Fail()
-				return fmt.Errorf("error determining executable path: %w", err)
-			}
-
-			currentPath, err = filepath.Abs(currentPath)
-			if err != nil {
-				progress.Fail()
-				return fmt.Errorf("error determining absolute target path: %w", err)
-			}
-
-			if err := os.Rename(tempPath, currentPath); err != nil {
-				if err := filesystem.CopyFile(tempPath, currentPath); err != nil {
+			if err := os.Rename(tmp, bin); err != nil {
+				if err := filesystem.CopyFile(tmp, bin); err != nil {
 					progress.Fail()
 					return fmt.Errorf("error moving latest viceroy binary in place: %w", err)
 				}
@@ -202,7 +188,7 @@ func (c *ServeCommand) Exec(in io.Reader, out io.Writer) (err error) {
 
 	progress.Done()
 
-	err = c.Local(out)
+	err = c.Local(bin, out)
 	if err != nil {
 		return err
 	}
@@ -210,8 +196,18 @@ func (c *ServeCommand) Exec(in io.Reader, out io.Writer) (err error) {
 	return nil
 }
 
+func installDir() (string, error) {
+	if dir, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(dir, "fastly"), nil
+	}
+	if dir, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(dir, ".fastly"), nil
+	}
+	return "", fmt.Errorf("error locating directory to install viceroy")
+}
+
 // Local spawns a subprocess that runs the compiled binary.
-func (c *ServeCommand) Local(out io.Writer) error {
+func (c *ServeCommand) Local(bin string, out io.Writer) error {
 	sig := make(chan os.Signal, 1)
 
 	signals := []os.Signal{
@@ -221,7 +217,7 @@ func (c *ServeCommand) Local(out io.Writer) error {
 
 	signal.Notify(sig, signals...)
 
-	cmd := exec.Command("viceroy", "bin/main.wasm", "-C", "fastly.toml")
+	cmd := exec.Command(bin, "bin/main.wasm", "-C", "fastly.toml")
 	cmd.Stdout = out
 	cmd.Stderr = out
 
