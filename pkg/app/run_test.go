@@ -50,18 +50,19 @@ func TestApplication(t *testing.T) {
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			var (
-				args                            = testcase.args
-				env                             = config.Environment{}
-				file                            = config.File{}
-				configFilePath                  = "/dev/null"
-				clientFactory                   = mock.APIClient(mock.API{})
-				httpClient     api.HTTPClient   = nil
-				cliVersioner   update.Versioner = nil
-				stdin          io.Reader        = nil
-				stdout         bytes.Buffer
-				stderr         bytes.Buffer
+				args                              = testcase.args
+				env                               = config.Environment{}
+				file                              = config.File{}
+				configFilePath                    = "/dev/null"
+				clientFactory                     = mock.APIClient(mock.API{})
+				httpClient       api.HTTPClient   = nil
+				cliVersioner     update.Versioner = nil
+				viceroyVersioner update.Versioner = nil
+				stdin            io.Reader        = nil
+				stdout           bytes.Buffer
+				stderr           bytes.Buffer
 			)
-			err := app.Run(args, env, file, configFilePath, clientFactory, httpClient, cliVersioner, stdin, &stdout)
+			err := app.Run(args, env, file, configFilePath, clientFactory, httpClient, cliVersioner, viceroyVersioner, stdin, &stdout)
 			if err != nil {
 				errors.Deduce(err).Print(&stderr)
 			}
@@ -315,6 +316,14 @@ COMMANDS
     -s, --service-id=SERVICE-ID  Service ID
         --version=VERSION        Number of version to activate
     -p, --path=PATH              Path to package
+
+  compute serve [<flags>]
+    Build and run a Compute@Edge package locally
+
+    --name=NAME          Package name
+    --language=LANGUAGE  Language type
+    --include-source     Include source code in built package
+    --force              Skip verification steps and force build
 
   compute update --service-id=SERVICE-ID --version=VERSION --path=PATH
     Update a package on a Fastly Compute@Edge service version

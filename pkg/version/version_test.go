@@ -16,17 +16,18 @@ import (
 
 func TestVersion(t *testing.T) {
 	var (
-		args                            = []string{"version"}
-		env                             = config.Environment{}
-		file                            = config.File{}
-		configFileName                  = "/dev/null"
-		clientFactory                   = mock.APIClient(mock.API{})
-		httpClient     api.HTTPClient   = nil
-		cliVersioner   update.Versioner = mock.Versioner{Version: "v1.2.3"}
-		in             io.Reader        = nil
-		out            bytes.Buffer
+		args                              = []string{"version"}
+		env                               = config.Environment{}
+		file                              = config.File{}
+		configFileName                    = "/dev/null"
+		clientFactory                     = mock.APIClient(mock.API{})
+		httpClient       api.HTTPClient   = nil
+		cliVersioner     update.Versioner = mock.Versioner{Version: "v1.2.3"}
+		viceroyVersioner update.Versioner = nil
+		in               io.Reader        = nil
+		out              bytes.Buffer
 	)
-	err := app.Run(args, env, file, configFileName, clientFactory, httpClient, cliVersioner, in, &out)
+	err := app.Run(args, env, file, configFileName, clientFactory, httpClient, cliVersioner, viceroyVersioner, in, &out)
 	testutil.AssertNoError(t, err)
 	testutil.AssertString(t, strings.Join([]string{
 		"Fastly CLI version v0.0.0-unknown (unknown)",

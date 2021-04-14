@@ -330,16 +330,17 @@ func TestConfigure(t *testing.T) {
 			defer os.RemoveAll(configFilePath)
 
 			var (
-				args                           = testcase.args
-				env                            = testcase.env
-				file                           = testcase.file
-				clientFactory                  = mock.APIClient(testcase.api)
-				httpClient                     = http.DefaultClient
-				cliVersioner  update.Versioner = nil
-				in            io.Reader        = strings.NewReader(testcase.stdin)
-				out           bytes.Buffer
+				args                              = testcase.args
+				env                               = testcase.env
+				file                              = testcase.file
+				clientFactory                     = mock.APIClient(testcase.api)
+				httpClient                        = http.DefaultClient
+				cliVersioner     update.Versioner = nil
+				viceroyVersioner update.Versioner = nil
+				in               io.Reader        = strings.NewReader(testcase.stdin)
+				out              bytes.Buffer
 			)
-			err := app.Run(args, env, file, configFilePath, clientFactory, httpClient, cliVersioner, in, &out)
+			err := app.Run(args, env, file, configFilePath, clientFactory, httpClient, cliVersioner, viceroyVersioner, in, &out)
 			testutil.AssertErrorContains(t, err, testcase.wantError)
 			for _, s := range testcase.wantOutput {
 				testutil.AssertStringContains(t, out.String(), s)
