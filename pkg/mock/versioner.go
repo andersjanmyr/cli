@@ -11,10 +11,12 @@ import (
 
 // Versioner mocks the update.Versioner interface.
 type Versioner struct {
-	Version string
-	Error   error
-	Binary  string // name of compiled binary
-	Local   string // name to use for binary once extracted
+	Version        string
+	Error          error
+	Binary         string // name of compiled binary
+	Local          string // name to use for binary once extracted
+	DownloadOK     bool
+	DownloadedFile string
 }
 
 // Make sure mock.Versioner implements update.Versioner.
@@ -30,6 +32,9 @@ func (v Versioner) LatestVersion(context.Context) (semver.Version, error) {
 
 // Download is a no-op.
 func (v Versioner) Download(context.Context, semver.Version) (filename string, err error) {
+	if v.DownloadOK {
+		return v.DownloadedFile, nil
+	}
 	return filename, fmt.Errorf("not implemented")
 }
 
