@@ -22,7 +22,7 @@ func TestVersion(t *testing.T) {
 		configFileName                    = "/dev/null"
 		clientFactory                     = mock.APIClient(mock.API{})
 		httpClient       api.HTTPClient   = nil
-		cliVersioner     update.Versioner = mock.Versioner{Version: "v1.2.3"}
+		cliVersioner     update.Versioner = nil
 		viceroyVersioner update.Versioner = nil
 		in               io.Reader        = nil
 		out              bytes.Buffer
