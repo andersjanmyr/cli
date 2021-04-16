@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -158,4 +159,58 @@ func TestManifestPrepend(t *testing.T) {
 	if err = f.Close(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// We expect the manifest to be unchanged after encoding/marshaling data back
+// to disk. This is to validate that manually added changes, such as the toml
+// syntax for Viceroy local testing, are not accidentally deleted.
+func TestManifestIgnoreManualUpdates(t *testing.T) {
+	fpath := filepath.Join("../", "testdata", "init", "fastly-viceroy-update.toml")
+
+	original, err := readManifest(fpath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m := File{
+		Authors:         []string{"phamann <patrick@fastly.com>"},
+		Description:     "Default package template for Rust based edge compute projects.",
+		Language:        "rust",
+		ManifestVersion: 1,
+		Name:            "Default Rust template",
+	}
+
+	err = m.Read(fpath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = m.Write(fpath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	latest, err := readManifest(fpath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(original, latest) {
+		t.Fatalf("the manifest was unexpectedly changed:\n\nORIGINAL:\n\n%s\n\nLATEST:\n\n%s", string(original), string(latest))
+	}
+}
+
+func readManifest(fpath string) ([]byte, error) {
+	f, err := os.OpenFile(fpath, os.O_RDWR, 0644)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	bs, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
+	return bs, nil
 }
