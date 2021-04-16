@@ -172,13 +172,7 @@ func TestManifestIgnoreManualUpdates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m := File{
-		Authors:         []string{"phamann <patrick@fastly.com>"},
-		Description:     "Default package template for Rust based edge compute projects.",
-		Language:        "rust",
-		ManifestVersion: 1,
-		Name:            "Default Rust template",
-	}
+	var m File
 
 	err = m.Read(fpath)
 	if err != nil {
