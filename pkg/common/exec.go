@@ -20,6 +20,7 @@ type StreamingExec struct {
 	env     []string
 	verbose bool
 	output  io.Writer
+	process *os.Process
 }
 
 // NewStreamingExec constructs a new StreamingExec instance.
@@ -30,6 +31,7 @@ func NewStreamingExec(cmd string, args, env []string, verbose bool, out io.Write
 		env,
 		verbose,
 		out,
+		nil,
 	}
 }
 
@@ -46,6 +48,9 @@ func (s StreamingExec) Exec() error {
 	cmd := exec.Command(s.command, s.args...)
 	cmd.Env = append(os.Environ(), s.env...)
 
+	// Store off Process so it can be killed by signals
+	s.process = cmd.Process
+
 	// Pipe the child process stdout and stderr to our own output writer.
 	var stderrBuf bytes.Buffer
 	cmd.Stdout = s.output
@@ -58,5 +63,16 @@ func (s StreamingExec) Exec() error {
 		return fmt.Errorf("error during execution process")
 	}
 
+	return nil
+}
+
+// Kill enables subprocess created to be terminated early.
+func (s StreamingExec) Kill() error {
+	if s.process != nil {
+		err := s.process.Signal(os.Kill)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }

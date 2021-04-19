@@ -94,7 +94,7 @@ func (c *ServeCommand) Exec(in io.Reader, out io.Writer) (err error) {
 		return err
 	}
 
-	err = local(bin, out, c.env.Value)
+	err = local(bin, out, c.env.Value, c.Globals.Flag.Verbose)
 	if err != nil {
 		return err
 	}
@@ -248,7 +248,7 @@ func updateViceroy(progress text.Progress, version string, out io.Writer, versio
 }
 
 // local spawns a subprocess that runs the compiled binary.
-func local(bin string, out io.Writer, env string) error {
+func local(bin string, out io.Writer, env string, verbose bool) error {
 	sig := make(chan os.Signal, 1)
 
 	signals := []os.Signal{
@@ -263,30 +263,21 @@ func local(bin string, out io.Writer, env string) error {
 		args = append(args, "--env", env)
 	}
 
-	// gosec flagged this:
-	// G204 (CWE-78): Subprocess launched with variable
-	// Disabling as the variables come from trusted sources.
-	/* #nosec */
-	cmd := exec.Command(bin, args...)
-	cmd.Stdout = out
-	cmd.Stderr = out
+	cmd := common.NewStreamingExec(bin, args, os.Environ(), verbose, out)
 
-	go func(sig chan os.Signal, cmd *exec.Cmd) {
+	go func(sig chan os.Signal, cmd *common.StreamingExec) {
 		<-sig
 		signal.Stop(sig)
 
-		err := cmd.Process.Signal(os.Kill)
+		err := cmd.Kill()
 		if err != nil {
 			log.Fatal(err)
 		}
 	}(sig, cmd)
 
-	err := cmd.Start()
-	if err != nil {
+	if err := cmd.Exec(); err != nil {
 		return err
 	}
-
-	cmd.Wait()
 
 	return nil
 }
