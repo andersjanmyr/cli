@@ -34,6 +34,9 @@ type ServeCommand struct {
 	lang       common.OptionalString
 	includeSrc common.OptionalBool
 	force      common.OptionalBool
+
+	// Viceroy fields
+	env common.OptionalString
 }
 
 // NewServeCommand returns a usable command registered under the parent.
@@ -54,6 +57,9 @@ func NewServeCommand(parent common.Registerer, globals *config.Data, build *Buil
 	c.CmdClause.Flag("language", "Language type").Action(c.lang.Set).StringVar(&c.lang.Value)
 	c.CmdClause.Flag("include-source", "Include source code in built package").Action(c.includeSrc.Set).BoolVar(&c.includeSrc.Value)
 	c.CmdClause.Flag("force", "Skip verification steps and force build").Action(c.force.Set).BoolVar(&c.force.Value)
+
+	// Viceroy flags
+	c.CmdClause.Flag("env", "The environment to use when selecting backend definitions").Action(c.env.Set).StringVar(&c.env.Value)
 
 	return &c
 }
@@ -88,7 +94,7 @@ func (c *ServeCommand) Exec(in io.Reader, out io.Writer) (err error) {
 		return err
 	}
 
-	err = local(bin, out)
+	err = local(bin, out, c.env.Value)
 	if err != nil {
 		return err
 	}
@@ -242,7 +248,7 @@ func updateViceroy(progress text.Progress, version string, out io.Writer, versio
 }
 
 // local spawns a subprocess that runs the compiled binary.
-func local(bin string, out io.Writer) error {
+func local(bin string, out io.Writer, env string) error {
 	sig := make(chan os.Signal, 1)
 
 	signals := []os.Signal{
@@ -252,11 +258,16 @@ func local(bin string, out io.Writer) error {
 
 	signal.Notify(sig, signals...)
 
+	args := []string{"bin/main.wasm", "-C", "fastly.toml"}
+	if env != "" {
+		args = append(args, "--env", env)
+	}
+
 	// gosec flagged this:
 	// G204 (CWE-78): Subprocess launched with variable
 	// Disabling as the variables come from trusted sources.
 	/* #nosec */
-	cmd := exec.Command(bin, "bin/main.wasm", "-C", "fastly.toml")
+	cmd := exec.Command(bin, args...)
 	cmd.Stdout = out
 	cmd.Stderr = out
 
