@@ -1,7 +1,6 @@
 package manifest
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"testing"
 
 	errs "github.com/fastly/cli/pkg/errors"
+	toml "github.com/pelletier/go-toml"
 )
 
 func TestManifest(t *testing.T) {
@@ -161,15 +161,37 @@ func TestManifestPrepend(t *testing.T) {
 	}
 }
 
-// We expect the manifest to be unchanged after encoding/marshaling data back
-// to disk. This is to validate that manually added changes, such as the toml
-// syntax for Viceroy local testing, are not accidentally deleted.
-func TestManifestIgnoreManualUpdates(t *testing.T) {
+// This test validates that manually added changes, such as the toml
+// syntax for Viceroy local testing, are not accidentally deleted after
+// decoding and encoding flows.
+func TestManifestPersistsTestingSection(t *testing.T) {
 	fpath := filepath.Join("../", "testdata", "init", "fastly-viceroy-update.toml")
 
-	original, err := readManifest(fpath)
+	b, err := os.ReadFile(fpath)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	defer func(fpath string, b []byte) {
+		err := os.WriteFile(fpath, b, 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}(fpath, b)
+
+	original, err := toml.LoadFile(fpath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ot := original.Get("testing")
+	if ot == nil {
+		t.Fatal("expected [testing] block to exist in fastly.toml but is missing")
+	}
+
+	osid := original.Get("service_id")
+	if osid != nil {
+		t.Fatal("did not expect service_id key to exist in fastly.toml but is present")
 	}
 
 	var m File
@@ -179,32 +201,29 @@ func TestManifestIgnoreManualUpdates(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	m.ServiceID = "a change occurred to the data structure"
+
 	err = m.Write(fpath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	latest, err := readManifest(fpath)
+	latest, err := toml.LoadFile(fpath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !bytes.Equal(original, latest) {
-		t.Fatalf("the manifest was unexpectedly changed:\n\nORIGINAL:\n\n%s\n\nLATEST:\n\n%s", string(original), string(latest))
-	}
-}
-
-func readManifest(fpath string) ([]byte, error) {
-	f, err := os.OpenFile(fpath, os.O_RDWR, 0644)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	bs, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
+	lsid := latest.Get("service_id")
+	if lsid == nil {
+		t.Fatal("expected service_id key to exist in fastly.toml but is missing")
 	}
 
-	return bs, nil
+	lt := latest.Get("testing")
+	if lt == nil {
+		t.Fatal("expected [testing] block to exist in fastly.toml but is missing")
+	}
+
+	if lt.(*toml.Tree).String() != ot.(*toml.Tree).String() {
+		t.Fatal("testing section between original and updated fastly.toml do not match")
+	}
 }

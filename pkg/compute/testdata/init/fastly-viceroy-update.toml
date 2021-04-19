@@ -6,7 +6,6 @@ description = "Default package template for Rust based edge compute projects."
 language = "rust"
 manifest_version = 1
 name = "Default Rust template"
-service_id = ""
 
 [testing]
 
