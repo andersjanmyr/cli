@@ -94,7 +94,7 @@ snapshot:
 changelog:
   sort: asc
 dockers:
-- image_templates: ["ghcr.io/andersjanmyr/fastly:{{ .Version }}"]
+- image_templates: ["ghcr.io/andersjanmyr/cli:{{ .Version }}"]
   dockerfile: Dockerfile
   build_flag_templates:
   - --label=org.opencontainers.image.title={{ .ProjectName }}
